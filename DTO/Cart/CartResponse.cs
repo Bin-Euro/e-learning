@@ -5,11 +5,10 @@ namespace Cursus.DTO.Cart
 {
     public class CartResponse
     {
-        public string Id { get; set; }
 
         public string UserID { get; set; }
 
-        public List<CartItemsDTO> Items { get; set; }
+        public List<CartItemDto> Items { get; set; }
 
         public double TotalPrice
         {
@@ -18,7 +17,6 @@ namespace Cursus.DTO.Cart
                 double totalPrice = Items.Sum(item => item.Price); 
                 return totalPrice;
             }
-            set { }
         }
     }
 }

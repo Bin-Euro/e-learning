@@ -41,3 +41,30 @@ public class ResultDTO<T>
         return new ResultDTO<T>(false, errorMessages, default(T), statusCodes);
     }
 }
+
+public class ResultDTO
+{
+    public bool IsSuccess { get; private set; }
+    public List<string> Messages { get; private set; }
+    public object Data { get; private set; }
+
+    public int StatusCode { get; private set; }
+
+    private ResultDTO(bool isSuccess, IEnumerable<string> message, object data, int statusCode)
+    {
+        IsSuccess = isSuccess;
+        Messages = message is null ? new List<string>() : message.ToList();
+        Data = data;
+        StatusCode = statusCode;
+    }
+
+    public static ResultDTO Success(object data = null, IEnumerable<string> message = null, int statusCode = 200)
+    {
+        return new ResultDTO(true, message, data, statusCode);
+    }
+
+    public static ResultDTO Fail(IEnumerable<string> errorMessages = null, int statusCodes = 500)
+    {
+        return new ResultDTO(false, errorMessages, null, statusCodes);
+    }
+}

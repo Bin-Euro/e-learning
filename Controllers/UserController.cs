@@ -1,5 +1,7 @@
-﻿using Cursus.DTO.User;
+﻿using Cursus.Constants;
+using Cursus.DTO.User;
 using Cursus.Services;
+using Cursus.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,10 +11,12 @@ namespace Cursus.Controllers
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
+        private readonly IRedisService _cacheService;
 
-        public UserController(IUserService userService)
+        public UserController(IUserService userService, IRedisService cacheService)
         {
             _userService = userService;
+            _cacheService = cacheService;
         }
 
         [HttpGet]
@@ -36,14 +40,18 @@ namespace Cursus.Controllers
         public async Task<IActionResult> UpdateUserProfile([FromBody] UserProfileUpdateDTO user)
         {
             var result = await _userService.UpdateUserProfile(user);
+            if (result._isSuccess)
+                await _cacheService.RemoveDataAsync(CacheKeyPatterns.User + User.Claims.FirstOrDefault(c => c.Type == "Id").Value);
             return StatusCode(result._statusCode, result);
         }
 
         [HttpPut("update-user-status")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> DisabledUser([FromBody] UpdateUserStatusDTO user)
+        public async Task<IActionResult> UpdateUserStatus([FromBody] UpdateUserStatusDTO user)
         {
             var result = await _userService.UpdateUserStatus(user.Id, user.Status);
+            if (result._isSuccess)
+                await _cacheService.RemoveDataAsync(CacheKeyPatterns.User + User.Claims.FirstOrDefault(c => c.Type == "Id").Value);
             return StatusCode(result._statusCode, result);
         }
     }

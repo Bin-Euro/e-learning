@@ -5,7 +5,6 @@ namespace Cursus.UnitOfWork
     public interface IUnitOfWork
     {
         IAnswerRepository AnswerRepository { get; }
-        // IAssignmentAnswerRepository AssignmentAnswerRepository { get; }
         IAssignmentRepository AssignmentRepository { get; }
         ICatalogRepository CatalogRepository { get; }
         ICourseCatalogRepository CourseCatalogRepository { get; }

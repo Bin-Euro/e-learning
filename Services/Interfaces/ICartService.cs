@@ -1,24 +1,14 @@
-﻿using Cursus.DTO.Catalog;
-using Cursus.DTO;
-using Cursus.Entities;
+﻿using Cursus.DTO;
 using Cursus.DTO.Cart;
 
 namespace Cursus.Services.Interfaces
 {
     public interface ICartService
     {
-        /*        Task<IEnumerable<CartResponse>> GetAll();*/
-        Task<ResultDTO<CartResponse>> GetByUserID();
-        Task<ResultDTO<CreateCart>> CreateCart(CreateCart catalogRequest);
-        Task<ResultDTO<AddOrRemoveCartRequest>> AddToCart(AddOrRemoveCartRequest request );
-        Task<ResultDTO<AddOrRemoveCartRequest>> RemoveItem(AddOrRemoveCartRequest request );
-        Task<ResultDTO<CartResponse>> ConfirmCart(string userId, List<string> courseIds);
-
-
-        /* Task<bool> DeleteCatalog(CatalogResDTO catalogRequest);
-
-         Task<CatalogRepDTO> GetCatalogByName(CatalogResDTO catalogRequest);
-
-         Task<ResultDTO<Catalog>> CatalogExists(string name);*/
+        Task<ResultDTO<CartResponse>> GetByUserIdAsync(Guid userId);
+        Task<ResultDTO<CartItem>> AddToCartAsync(Guid userId, Guid courseId);
+        Task<ResultDTO> RemoveItemAsync(Guid userId, Guid courseId);
+        Task<bool> RemoveManyItemsAsync(Guid userId, IEnumerable<Guid> courseIds);
+        Task<bool> RemoveAllAsync(Guid userId);
     }
 }

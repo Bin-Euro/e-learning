@@ -30,7 +30,7 @@ namespace Cursus.Controllers
 
         [HttpPost("register-instructor")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> RegistrationInstructor([FromBody] RegisterDTO register)
+        public async Task<IActionResult> RegistrationInstructor([FromBody] InstructorRegisterDTO register)
         {
             var result = await _authService.InstructorRegistration(register);
             return StatusCode(result._statusCode, result);

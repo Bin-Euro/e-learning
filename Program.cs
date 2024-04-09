@@ -12,27 +12,21 @@ using Cursus.UnitOfWork;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using MongoDB.Driver;
 using System.Text;
+using AspNetCoreRateLimit;
+using Cursus.Authentication;
+using Cursus.Constants;
 using Cursus.DTO;
-using CodeMegaVNPay.Services;
+using Hangfire;
+using Hangfire.Dashboard.BasicAuthorization;
+using Hangfire.PostgreSql;
 using payment.Services;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// connect mongodb
-builder.Services.Configure<CartDatabaseSettings>(
-    builder.Configuration.GetSection(nameof(CartDatabaseSettings)));
-
-builder.Services.AddSingleton<ICartDatabaseSettings>(sp =>
-    sp.GetRequiredService<IOptions<CartDatabaseSettings>>().Value);
-
-builder.Services.AddSingleton<IMongoClient>(s =>
-    new MongoClient(builder.Configuration.GetValue<string>("DatabaseSettings:ConnectionString")));
-builder.Services.AddScoped<ICartDbContext, CartDbContext>();
 //....
 
 // Add services to the container.
@@ -44,50 +38,73 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowAnyHeader());
 });
+
+builder.Services.AddMemoryCache();
+builder.Services.Configure<IpRateLimitOptions>(builder.Configuration.GetSection("IpRateLimiting"));
+builder.Services.Configure<IpRateLimitPolicies>(builder.Configuration.GetSection("IpRateLimitPolicies"));
+builder.Services.AddInMemoryRateLimiting();
+builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddSwaggerGen(options =>
+if (builder.Environment.IsDevelopment() || builder.Environment.IsStaging())
 {
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    builder.Services.AddSwaggerGen(options =>
     {
-        Name = "Authorization",
-        Description = "Enter the Bearer Authorization string as following: `Bearer Generated-JWT-Token`",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement()
-    {
+        options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
         {
-            new OpenApiSecurityScheme()
+            Name = "Authorization",
+            Description = "Enter the Bearer Authorization string as following: `Bearer Generated-JWT-Token`",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.ApiKey,
+            Scheme = "Bearer"
+        });
+        options.AddSecurityRequirement(new OpenApiSecurityRequirement()
+        {
             {
-                In = ParameterLocation.Header,
-                Name = "Bearer",
-                Reference = new OpenApiReference()
+                new OpenApiSecurityScheme()
                 {
-                    Id = "Bearer",
-                    Type = ReferenceType.SecurityScheme
+                    In = ParameterLocation.Header,
+                    Name = "Bearer",
+                    Reference = new OpenApiReference()
+                    {
+                        Id = "Bearer",
+                        Type = ReferenceType.SecurityScheme
+                    },
                 },
-            },
-            new List<string>()
-        }
+                new List<string>()
+            }
+        });
     });
-});
+}
+
+if (builder.Environment.IsStaging() || builder.Environment.IsProduction())
+{
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseColouredConsoleLogProvider()
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(builder.Configuration.GetConnectionString("MyDbContext")));
+
+    builder.Services.AddHangfireServer();
+}
 
 builder.Services.AddDbContext<MyDbContext>(options =>
 {
-    options.UseNpgsql(builder.Configuration.GetConnectionString("MyDbContext"));
+    options.UseNpgsql(
+        !builder.Environment.IsDevelopment()
+            ? Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
+            : builder.Configuration.GetConnectionString("MyDbContext"));
 });
+builder.Services.AddSingleton<IMongoDbContext, MongoDbContext>();
 
-builder.Services.AddControllers(options =>
-{
-    options.Filters.Add<GlobalExceptionHandler>();
-});
+builder.Services.AddControllers(options => { options.Filters.Add<GlobalExceptionHandler>(); });
 
 builder.Services.AddIdentity<User, IdentityRole>()
-    .AddEntityFrameworkStores<MyDbContext>()
-    .AddDefaultTokenProviders();
+    .AddEntityFrameworkStores<MyDbContext>();
+    // .AddDefaultTokenProviders();
 
 builder.Services.AddAuthentication(options =>
     {
@@ -95,7 +112,6 @@ builder.Services.AddAuthentication(options =>
         options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
         options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
     })
-
     .AddJwtBearer(options =>
     {
         options.RequireHttpsMetadata = false;
@@ -108,48 +124,13 @@ builder.Services.AddAuthentication(options =>
             ClockSkew = TimeSpan.Zero,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"]))
         };
-        options.Events = new JwtBearerEvents()
-        {
-            OnChallenge = context =>
-            {
-                var ex = context.AuthenticateFailure;
-
-                context.Response.OnStarting(async () =>
-                {
-                    var message = "";
-                    if (ex is not null)
-                    {
-                        message = "Invalid token";
-                        if (ex.GetType() == typeof(SecurityTokenExpiredException))
-                            message = "Expired token";
-                    }
-
-                    context.Response.WriteAsJsonAsync(ResultDTO<string>.Fail(message, context.Response.StatusCode));
-                });
-
-                return Task.CompletedTask;
-            },
-            OnForbidden = context =>
-            {
-                context.Response.OnStarting(async () =>
-                {
-                    await context.Response.WriteAsJsonAsync(ResultDTO<string>.Fail(
-                            "You are not allow to access this resource", context.Response.StatusCode
-                        )
-                    );
-                });
-
-                return Task.CompletedTask;
-            }
-        };
+        options.Events = new ApplicationJwtBearEvents();
     });
 
-builder.Services.AddScoped<ICartRepository, CartRepository>();
-builder.Services.AddScoped<ICartItemRepository, CartItemRepository>();
-
+builder.Services.AddScoped<IQuizRepository, QuizRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddAutoMapper(typeof(CursusAutoMapperProfile).Assembly);
-
+builder.Services.AddTransient<ISectionService, SectionService>();
 builder.Services.AddTransient<ICourseService, CourseService>();
 builder.Services.AddTransient<IAuthService, AuthService>();
 builder.Services.AddTransient<ITokenService, TokenService>();
@@ -157,19 +138,56 @@ builder.Services.AddTransient<ICourseCatalogService, CourseCatalogService>();
 builder.Services.AddTransient<ICatalogService, CatalogService>();
 builder.Services.AddTransient<ICartService, CartService>();
 builder.Services.AddTransient<IUserService, UserService>();
+builder.Services.AddTransient<ILessonService, LessonService>();
 builder.Services.AddTransient<IGoogleService, GoogleService>();
-builder.Services.AddScoped<IVnPayService, VnPayService>();
+builder.Services.AddTransient<IQuizService, QuizService>();
+builder.Services.AddTransient<IInstructorService, InstructorService>();
+builder.Services.AddTransient<IVnPayService, VnPayService>();
+builder.Services.AddTransient<IDataService, DataService>();
+builder.Services.AddTransient<IAssignmentService, AssignmentService>();
+builder.Services.AddSingleton<IRedisService>(new RedisService(
+    !builder.Environment.IsDevelopment()
+        ? Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
+        : builder.Configuration.GetConnectionString("LocalRedis"))
+);
+builder.Services.AddTransient<IAdminService, AdminService>();
 
+builder.Services.AddScoped<IQuizAnswerRepository, QuizAnswerRepository>();
+builder.Services.AddScoped<IQuizAnswerService, QuizAnswerService>();
 var app = builder.Build();
 
+app.UseIpRateLimiting();
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(options =>
+    app.UseSwaggerUI(options => { options.SwaggerEndpoint("/swagger/v1/swagger.json", "Support APP API"); });
+}
+
+if (app.Environment.IsStaging() || app.Environment.IsProduction())
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions()
     {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Support APP API");
+        Authorization = new[]
+        {
+            new BasicAuthAuthorizationFilter(new BasicAuthAuthorizationFilterOptions
+            {
+                RequireSsl = false,
+                SslRedirect = false,
+                LoginCaseSensitive = true,
+                Users = new[]
+                {
+                    new BasicAuthAuthorizationUser
+                    {
+                        Login = "hangfire_admin",
+                        PasswordClear = "@CursusOJT123"
+                    }
+                }
+            })
+        }
     });
+    app.MapHangfireDashboard();
+    RecurringJob.AddOrUpdate<IDataService>(service => service.FindAndUpdateExpiredStatusOrders(), "*/30 * * * *");
 }
 
 app.UseHttpsRedirection();

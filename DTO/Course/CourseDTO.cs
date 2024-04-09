@@ -13,6 +13,8 @@ namespace Cursus.DTO.Course
         public double AvgRate { get; set; }
         public InstructorDTO Instructor { get; set; }
         public int LearnerQuantity { get; set; }
+        public int LessonQuantity { get; set; }
+        public int TotalTimeTaken { get; set; }
         public DateTime CreatedDate { get; set; }
     }
 

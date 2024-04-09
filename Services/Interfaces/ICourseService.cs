@@ -11,19 +11,27 @@ namespace Cursus.Services
 {
     public interface ICourseService
     {
-        public ResultDTO<CourseListDTO> GetCoursesByFilter(
+        public Task<ResultDTO<CourseListDTO>> GetCoursesByFilterAsync(
             int offset, int limit,
             double minPrice, double maxPrice, List<Guid> catalogIDs,
+            string? courseName,
+            string? instructorName,
             CourseSort courseSort
         );
 
-        public Task<ResultDTO<CourseListDTO>> GetCoursesByInstructor(
+        public Task<CourseDetailDTO> GetCourseDetailAsync(Guid courseId);
+
+        public Task<ResultDTO<CourseListDTO>> GetCoursesByInstructorAsync(
             int offset, int limit
         );
 
         Task<ResultDTO<CreateCourseResDTO>> AddCourse(CreateCourseReqDTO courseRequest);
         Task Update(UpdateCourseDTO updateCourse);
-
         Task<ResultDTO<string>> DeleteCourse(Guid id);
+        Task<ResultDTO<CourseListDTO>> GetInstructorCoursesAsync();
+        Task<ResultDTO<CourseListDTO>> GetPaidCoursesAsync();
+        Task<ResultDTO<PublicCourseDetailDTO>> GetPublicCourseDetailAsync(Guid courseId);
+        Task<bool> CanCurrentUserAccessCourseAsync(Guid courseId, string userRole);
+        Task<ResultDTO<CourseDetailDTO>> GetPaidCourseDetailAsync(Guid courseId);
     }
 }

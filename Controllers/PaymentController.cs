@@ -10,10 +10,12 @@ namespace payment.Controllers
     public class PaymentController : Controller
     {
         private readonly IVnPayService _vnPayService;
+        private readonly IConfiguration _configuration;
 
-        public PaymentController(IVnPayService vnPayService)
+        public PaymentController(IVnPayService vnPayService, IConfiguration configuration)
         {
             _vnPayService = vnPayService;
+            _configuration = configuration;
         }
         [HttpPost("create-payment-url")]
         [Authorize]
@@ -36,14 +38,25 @@ namespace payment.Controllers
             var response = await _vnPayService.PaymentExecute(Request.Query);
             if (!response._isSuccess)
             {
-                return NotFound(response);
+                return Redirect($"https://expertmind-aca.vercel.app/payment-status?status=unsuccess&id={response._data.OrderId}");
             }
-            return Ok(response);
+            return Redirect($"https://expertmind-aca.vercel.app/payment-status?status=success&id={response._data.OrderId}");
         }
         [HttpGet("get-payment-by-id")]
         public async Task<IActionResult> GetOrder(string code)
         {
             var response = await _vnPayService.GetOrderByCode(code);
+            if (!response._isSuccess)
+            {
+                return NotFound(response);
+            }
+            return Ok(response);
+        }
+
+        [HttpGet("my-payment")]
+        public async Task<IActionResult> GetAllOrder()
+        {
+            var response = await _vnPayService.GetMyPayments();
             if (!response._isSuccess)
             {
                 return NotFound(response);

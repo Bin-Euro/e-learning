@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Cursus.DTO;
 using Cursus.Services;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
@@ -19,50 +20,59 @@ namespace Cursus.Controllers
     public class CartController : ControllerBase
     {
         private readonly ICartService _service;
+        private readonly IUserService _userService;
 
-        public CartController(ICartService service)
+        public CartController(ICartService service, IUserService userService)
         {
             _service = service;
+            _userService = userService;
         }
 
         [HttpGet("")]
         public async Task<ActionResult<CartResponse>> Get()
         {
-            var result = await _service.GetByUserID();
+            var user = await _userService.GetCurrentUser();
+            if (user is null)
+                return NotFound(ResultDTO.Fail(new[] { "User not found" }));
+            var result = await _service.GetByUserIdAsync(Guid.Parse(user.Id));
             return StatusCode(result._statusCode, result);
         }
 
-        // [HttpPost("confirm-cart")]
-        // public async Task<ActionResult<CartResponse>> ConfirmCart([FromBody] ConfirmCartRequest request)
-        // {
-        //     var confirmCart = await _service.ConfirmCart(request.UserId, request.CourseIds);
-        //     if (!confirmCart._isSuccess)
-        //     {
-        //         return NotFound(request);
-        //     }
-        //     return Ok(confirmCart);
-        // }
-
         [HttpPut("add-to-cart")]
-        public async Task<ActionResult<CreateCart>> AddToCart(AddOrRemoveCartRequest request)
+        public async Task<ActionResult<AddOrRemoveCartRequest>> AddToCart(AddOrRemoveCartRequest request)
         {
-            var addToCart = await _service.AddToCart(request);
+            var user = await _userService.GetCurrentUser();
+            if (user is null)
+                return NotFound(ResultDTO.Fail(new[] { "User not found" }));
+
+            if (string.IsNullOrEmpty(request.CourseID))
+                return BadRequest(ResultDTO.Fail(new[] { "Course ID is required" }));
+
+            var addToCart = await _service.AddToCartAsync(Guid.Parse(user.Id), Guid.Parse(request.CourseID));
             if (!addToCart._isSuccess)
             {
                 return NotFound(addToCart);
             }
+
             return Ok(addToCart);
         }
 
         [HttpDelete("remove-item")]
-        public async Task<ActionResult<CreateCart>> RemoveItem(AddOrRemoveCartRequest request)
+        public async Task<IActionResult> RemoveItem(AddOrRemoveCartRequest request)
         {
-            var remove = await _service.RemoveItem(request);
-            if (!remove._isSuccess)
+            var user = await _userService.GetCurrentUser();
+            if (user is null)
+                return NotFound(ResultDTO.Fail(new[] { "User not found" }));
+
+            if (string.IsNullOrEmpty(request.CourseID))
+                return BadRequest(ResultDTO.Fail(new[] { "Course ID is required" }));
+            var remove = await _service.RemoveItemAsync(Guid.Parse(user.Id), Guid.Parse(request.CourseID));
+            if (!remove.IsSuccess)
             {
                 return NotFound(remove);
             }
-            return Ok(remove);
+
+            return Ok(ResultDTO.Success(request));
         }
     }
 }

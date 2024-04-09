@@ -86,6 +86,7 @@ namespace Cursus.Services
                 if (model.CurrentPassword.Equals(model.NewPassword))
                 {
                     return ResultDTO<ChangePasswordDTO>.Fail("Password Duplicate", 400);
+                    
                 }
 
                 if (!model.ConfirmNewPassword.Equals(model.NewPassword))
@@ -114,19 +115,10 @@ namespace Cursus.Services
             if (!result._isSuccess)
                 return ResultDTO<string>.Fail(result._message, result._statusCode);
 
-            try
-            {
-                _cartService.CreateCart(new CreateCart() { UserID = result._data });
-                return ResultDTO<string>.Success("", result._message[0]);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-                return ResultDTO<string>.Fail("Service is not available");
-            }
+            return ResultDTO<string>.Success("", result._message[0]);
         }
 
-        public async Task<ResultDTO<string>> InstructorRegistration(RegisterDTO model)
+        public async Task<ResultDTO<string>> InstructorRegistration(InstructorRegisterDTO model)
         {
             var result = await Registration(model, "Instructor");
 
@@ -137,8 +129,8 @@ namespace Cursus.Services
             {
                 var instructor = new Instructor()
                 {
-                    Bio = "",
-                    Career = "",
+                    Bio = model.Bio ?? "",
+                    Career = model.Career ?? "",
                     UserID = Guid.Parse((ReadOnlySpan<char>)result._data)
                 };
                 await _unitOfWork.InstructorRepository.AddAsync(instructor);
@@ -210,7 +202,7 @@ namespace Cursus.Services
             if (string.IsNullOrEmpty(register.Password))
                 return ResultDTO<string>.Fail("Password is required", 400);
 
-            if (!Regex.IsMatch(register.PhoneNumber, PHONE_NUMBER_PATTERN))
+            if (!string.IsNullOrEmpty(register.PhoneNumber) && !Regex.IsMatch(register.PhoneNumber, PHONE_NUMBER_PATTERN))
                 return ResultDTO<string>.Fail("Invalid phone number format", 400);
 
             try
@@ -230,12 +222,12 @@ namespace Cursus.Services
                 var user = new User
                 {
                     UserName = register.Username,
-                    // FirstName = register.FirstName,
-                    // LastName = register.LastName,
+                    FirstName = register.FirstName ?? "",
+                    LastName = register.LastName ?? "",
                     SecurityStamp = Guid.NewGuid().ToString(),
                     Email = register.Email,
-                    Address = register.Address,
-                    PhoneNumber = register.PhoneNumber,
+                    Address = register.Address ?? "",
+                    PhoneNumber = register.PhoneNumber ?? "",
                     Status = Enum.GetName(UserStatus.Enable),
                     CreatedDate = DateTime.UtcNow,
                     UpdatedDate = DateTime.UtcNow,
@@ -249,7 +241,7 @@ namespace Cursus.Services
                     return ResultDTO<string>.Fail(result.Errors.Select(err => err.Description));
                 }
 
-                if (!await _roleManager.RoleExistsAsync(role))
+                if (!await _roleManager.RoleExistsAsync(role))                  
                     return ResultDTO<string>.Fail("Role is not exist");
 
                 if (await _roleManager.RoleExistsAsync(role))
@@ -276,14 +268,14 @@ namespace Cursus.Services
                 {
                     // Check if the user already exists in your database based on email
 
-                    var existingUser = await _userManager.Users.Where(u => u.Status == Enum.GetName(UserStatus.Enable))
+                    var existingUser = await _userManager.Users
                     .FirstOrDefaultAsync(u => u.Email == validPayload.Email);
                     //check if existingUser is exit in db 
                     if (existingUser == null)
                     {
                         var user = new User
                         {
-                            UserName = Regex.Replace(validPayload.Name, @"\s", string.Empty),
+                            UserName = validPayload.Email,
                             FirstName = validPayload.GivenName,
                             LastName = validPayload.FamilyName,
                             SecurityStamp = Guid.NewGuid().ToString(),
@@ -296,11 +288,26 @@ namespace Cursus.Services
                             Image = validPayload.Picture,
                             Gender = ""
                         };
+                        
+                        
                         var result = await _userManager.CreateAsync(user);
+                        if (!result.Succeeded)
+                        {
+                            return ResultDTO<LoginResponseDTO>.Fail("invalid condition");
+                        }
                         await _userManager.AddToRoleAsync(user, "User");
                         existingUser = user;
 
                     }
+                    //check disable
+                    var enUser = await _userManager.Users.Where(u => u.Status == Enum.GetName(UserStatus.Disable))
+                         .FirstOrDefaultAsync(u => u.Email == validPayload.Email);
+
+                    if (enUser != null)
+                    {
+                        return ResultDTO<LoginResponseDTO>.Fail("user disable");
+                    }
+
                     //generate JWT token 
                     var userClaim = new Claim("Id", existingUser.Id);
                     var userRoles = await _userManager.GetRolesAsync(existingUser);
@@ -311,8 +318,6 @@ namespace Cursus.Services
                         AccessToken = new JwtSecurityTokenHandler().WriteToken(token),
                         Expire = token.ValidTo
                     };
-
-
 
                     return ResultDTO<LoginResponseDTO>.Success(LoginRes);
                 }

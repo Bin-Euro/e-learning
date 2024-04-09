@@ -1,224 +1,156 @@
-﻿using Amazon.Runtime.Internal;
+﻿using System.Text;
+using System.Text.Json;
 using AutoMapper;
 using Cursus.DTO;
 using Cursus.DTO.Cart;
-using Cursus.DTO.Course;
 using Cursus.Entities;
 using Cursus.Repositories.Interfaces;
 using Cursus.Services.Interfaces;
 using Cursus.UnitOfWork;
+using StackExchange.Redis;
 
 namespace Cursus.Services
 {
     public class CartService : ICartService
     {
-        private readonly ICartRepository _repository;
-        private readonly ICartItemRepository _cartItemRepository;
         private readonly IMapper _mapper;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IUserService _userService;
+        private readonly IRedisService _redisService;
 
-        public CartService(IUnitOfWork unitOfWork, ICartRepository repository, ICartItemRepository cartItemRepository,
-            IUserService userService, IMapper mapper)
+        public CartService(IUnitOfWork unitOfWork,
+            IUserService userService, IRedisService redisService, IMapper mapper)
         {
-            _repository = repository;
-            _cartItemRepository = cartItemRepository;
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _userService = userService;
+            _redisService = redisService;
         }
 
-        public async Task<ResultDTO<CartResponse>> GetByUserID()
+        public async Task<ResultDTO<CartResponse>> GetByUserIdAsync(Guid userId)
         {
             try
             {
-                var user = await _userService.GetCurrentUser();
-                if (user is null)
-                    return ResultDTO<CartResponse>.Fail("User is not found");
-                var CartByID = _repository.GetByUserID(user.Id);
-                if (CartByID == null)
+                var cartResponse = new CartResponse
                 {
-                    return ResultDTO<CartResponse>.Fail("Cart is not Exist", 404);
+                    Items = new List<CartItemDto>(),
+                    UserID = userId.ToString()
+                };
+                var data = await _redisService.RedisDb.HashGetAllAsync($"cart:{userId}");
+                if (data is null) return ResultDTO<CartResponse>.Success(cartResponse);
+                var courses = await _unitOfWork.CourseRepository
+                    .GetManyAsync(c => data.Select(entry => Guid.Parse(entry.Name.ToString()))
+                        .Contains(c.ID));
+
+                async Task<CartItemDto> GetCartItemAsync(Course course)
+                {
+                    var cartItem = _mapper.Map<CartItemDto>(course);
+                    var value = data.FirstOrDefault(entry => entry.Name.ToString() == course.ID.ToString()).Value;
+                    await using (Stream memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(value)))
+                    {
+                        var deserializedValue = await JsonSerializer.DeserializeAsync<CartItem>(memoryStream);
+                        cartItem.CreateDate = deserializedValue.CreatedDate;
+                    }
+
+                    return cartItem;
                 }
 
-                var cartItemsDTO = (await _unitOfWork.CourseRepository
-                        .GetAllAsync())
-                    .Join(
-                        CartByID.Items,
-                        c => c.ID.ToString(),
-                        item => item.CourseID,
-                        (c, item) => new CartItemsDTO
-                        {
-                            CourseID = item.CourseID,
-                            Description = c.Description,
-                            Price = c.Price,
-                            CourseName = c.Name,
-                            CreateDate = item.CreatedDate,
-                            InstructorID = c.InstructorID
-                        });
+                var cartItems = await Task.WhenAll(courses.Select(c => GetCartItemAsync(c)));
+                cartResponse.Items = cartItems.ToList();
 
-                var cartResponse = new CartResponse()
-                {
-                    Id = CartByID.Id,
-                    Items = cartItemsDTO.ToList(),
-                    TotalPrice = cartItemsDTO.Sum(item => item.Price),
-                    UserID = CartByID.UserID
-                };
                 return ResultDTO<CartResponse>.Success(cartResponse);
             }
             catch (Exception ex)
             {
-                return ResultDTO<CartResponse>.Fail("Failed to add course: " + ex.Message);
+                Console.WriteLine(ex.Message);
+                return ResultDTO<CartResponse>.Fail("Failed to get cart");
             }
         }
 
-        public async Task<ResultDTO<CartResponse>> ConfirmCart(string userId, List<string> courseIds)
+        public async Task<ResultDTO<CartItem>> AddToCartAsync(Guid userId, Guid courseId)
         {
             try
             {
-                var CartByID = _repository.GetByUserID(userId);
-                if (CartByID == null)
+                var course =
+                    await _unitOfWork.CourseRepository.GetByIdAsync(courseId);
+
+                if (course is null || course.IsDeleted)
                 {
-                    return ResultDTO<CartResponse>.Fail("Cart is not Exist");
+                    return ResultDTO<CartItem>.Fail("Course is not Existed");
                 }
 
-                var cartItems = new List<CartItem>();
+                var courses = await _unitOfWork.CourseRepository.GetUserPaidCoursesAsync(userId);
 
-                foreach (var courseId in courseIds)
-                {
-                    var cartItem = CartByID.Items.FirstOrDefault(item => item.CourseID == courseId);
-                    if (cartItem != null)
-                    {
-                        cartItems.Add(cartItem);
-                    }
-                    else
-                    {
-                        return ResultDTO<CartResponse>.Fail("Some Course don't have in Cart");
-                    }
-                }
-
-                if (cartItems != null)
-                {
-                    CartByID.Items = cartItems;
-                }
-
-                return ResultDTO<CartResponse>.Success(_mapper.Map<CartResponse>(CartByID));
-            }
-            catch (Exception ex)
-            {
-                return ResultDTO<CartResponse>.Fail("Failed to add course: " + ex.Message);
-            }
-        }
-
-        public async Task<ResultDTO<CreateCart>> CreateCart(CreateCart request)
-        {
-            try
-            {
-                if (request.UserID == null)
-                {
-                    return ResultDTO<CreateCart>.Fail("Invalid input data");
-                }
-
-                var checkCart = _repository.GetByUserID(request.UserID);
-                if (checkCart != null)
-                {
-                    return ResultDTO<CreateCart>.Fail("Cart is already existed!");
-                }
-
-                var newCart = new Cart
-                {
-                    UserID = request.UserID,
-                    Items = new List<CartItem>
-                    {
-                    }
-                };
-
-                // Lưu đối tượng Cart mới vào cơ sở dữ liệu
-                _repository.Create(newCart);
-
-                return ResultDTO<CreateCart>.Success(request);
-            }
-            catch (Exception ex)
-            {
-                return ResultDTO<CreateCart>.Fail("Failed to add course: " + ex.Message);
-            }
-        }
-
-        public async Task<ResultDTO<AddOrRemoveCartRequest>> AddToCart(AddOrRemoveCartRequest request)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(request.CourseID))
-                {
-                    return ResultDTO<AddOrRemoveCartRequest>.Fail("Course ID is required", 400);
-                }
-
-                var checkCourse = await _unitOfWork.CourseRepository.GetAsync(c => c.ID.ToString() == request.CourseID);
-
-                if (checkCourse == null)
-                {
-                    return ResultDTO<AddOrRemoveCartRequest>.Fail("Course is not Existed");
-                }
-
-                var user = await _userService.GetCurrentUser();
-
-                if (user is null)
-                    return ResultDTO<AddOrRemoveCartRequest>.Fail("User is not found");
-
-                bool courseExistsInCart = _repository.GetByUserID(user.Id).Items
-                    .Any(item => item.CourseID == request.CourseID);
-
-                if (courseExistsInCart)
-                {
-                    return ResultDTO<AddOrRemoveCartRequest>.Fail("Course already exists in the cart");
-                }
+                if (courses.Any(course => course.ID == courseId))
+                    return ResultDTO<CartItem>.Fail("You owned this course");
 
                 var cartItem = new CartItem
                 {
-                    CourseID = request.CourseID,
+                    CourseId = course.ID,
                     CreatedDate = DateTime.UtcNow
                 };
+                string serializedValue;
+                await using (Stream memoryStream = new MemoryStream())
+                {
+                    await JsonSerializer.SerializeAsync(memoryStream, cartItem);
+                    memoryStream.Position = 0;
+                    using (var streamReader = new StreamReader(memoryStream))
+                    {
+                        serializedValue = await streamReader.ReadToEndAsync();
+                    }
+                }
 
-                _cartItemRepository.AddToCart(user.Id, cartItem);
+                await _redisService.RedisDb.HashSetAsync($"cart:{userId}", courseId.ToString(),
+                    serializedValue);
 
-                return ResultDTO<AddOrRemoveCartRequest>.Success(request);
+                return ResultDTO<CartItem>.Success(cartItem);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
-                return ResultDTO<AddOrRemoveCartRequest>.Fail("Failed to add to cart");
+                return ResultDTO<CartItem>.Fail("Failed to add to cart");
             }
         }
 
-        public async Task<ResultDTO<AddOrRemoveCartRequest>> RemoveItem(AddOrRemoveCartRequest request)
+        public async Task<ResultDTO> RemoveItemAsync(Guid userId, Guid courseId)
         {
             try
             {
-                if (request.CourseID == null)
-                {
-                    return ResultDTO<AddOrRemoveCartRequest>.Fail("Invalid input data");
-                }
-
-                var checkCourse = await _unitOfWork.CourseRepository.GetAsync(c => c.ID.ToString() == request.CourseID);
-
-                if (checkCourse == null)
-                {
-                    return ResultDTO<AddOrRemoveCartRequest>.Fail("Course is not Existed");
-                }
-
-                var user = await _userService.GetCurrentUser();
-
-                var remove = _cartItemRepository.RemoveItem(user?.Id, request.CourseID);
-                if (remove)
-                {
-                    return ResultDTO<AddOrRemoveCartRequest>.Success(request);
-                }
-
-                return ResultDTO<AddOrRemoveCartRequest>.Fail("Have some problem when removing!");
+                await _redisService.RedisDb.HashDeleteAsync($"cart:{userId}", courseId.ToString());
+                return ResultDTO.Success();
             }
             catch (Exception ex)
             {
-                return ResultDTO<AddOrRemoveCartRequest>.Fail("Failed to remove: " + ex.Message);
+                return ResultDTO.Fail(new[] { "Failed to remove: " + ex.Message });
+            }
+        }
+
+        public async Task<bool> RemoveManyItemsAsync(Guid userId, IEnumerable<Guid> courseIds)
+        {
+            try
+            {
+                await _redisService.RedisDb.HashDeleteAsync($"cart:{userId}",
+                    courseIds.Select(id => new RedisValue(id.ToString())).ToArray());
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return false;
+            }
+        }
+
+        public async Task<bool> RemoveAllAsync(Guid userId)
+        {
+            try
+            {
+                await _redisService.RedisDb.KeyDeleteAsync($"cart:{userId}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return false;
             }
         }
     }

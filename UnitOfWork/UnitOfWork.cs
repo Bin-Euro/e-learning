@@ -1,6 +1,7 @@
 using Cursus.Data;
 using Cursus.Repositories;
 using Cursus.Repositories.Interfaces;
+using Cursus.Services.Interfaces;
 
 namespace Cursus.UnitOfWork
 {
@@ -9,19 +10,19 @@ namespace Cursus.UnitOfWork
         private readonly MyDbContext _dbContext;
         private IAnswerRepository _AnswerRepository;
         private IAssignmentAnswerRepository _AssignmentAnswerRepository;
-        private IAssignmentRepository _AssignmentRepository;
+        private IAssignmentRepository _assignmentRepository;
         private ICatalogRepository _CatalogRepository;
         private ICourseCatalogRepository _CourseCatalogRepository;
         private ICourseFeedbackRepository _CourseFeedbackRepository;
         private ICourseReportRepository _CourseReportRepository;
-        private ICourseRepository _CourseRepository;
+        private ICourseRepository _courseRepository;
         private IInstructorRepository _InstructorRepository;
-        private ILessonRepository _LessonRepository;
+        private ILessonRepository _lessonRepository;
         private INotificationRepository _NotificationRepository;
         private IOrderRepository _OrderRepository;
         private IOrderDetailRepository _OrderDetailRepository;
         private IReportRepository _ReportRepository;
-        private ISectionRepository _SectionRepository;
+        private ISectionRepository _sectionRepository;
         private IUserReportRepository _UserReportRepository;
         private IUserRepository _UserRepository;
 
@@ -35,18 +36,13 @@ namespace Cursus.UnitOfWork
             get { return _AnswerRepository = _AnswerRepository ?? new AnswerRepository(_dbContext); }
         }
 
-        // public IAssignmentAnswerRepository AssignmentAnswerRepository
-        // {
-        //     get
-        //     {
-        //         return _AssignmentAnswerRepository =
-        //             _AssignmentAnswerRepository ?? new AssignmentAnswerRepository(_dbContext);
-        //     }
-        // }
-
         public IAssignmentRepository AssignmentRepository
         {
-            get { return _AssignmentRepository = _AssignmentRepository ?? new AssignmentRepository(_dbContext); }
+            get
+            {
+                return _assignmentRepository =
+                    _assignmentRepository ?? new AssignmentRepository(_dbContext);
+            }
         }
 
         public ICatalogRepository CatalogRepository
@@ -78,7 +74,11 @@ namespace Cursus.UnitOfWork
 
         public ICourseRepository CourseRepository
         {
-            get { return _CourseRepository = _CourseRepository ?? new CourseRepository(_dbContext); }
+            get
+            {
+                return _courseRepository = _courseRepository ??
+                                           new CourseRepository(_dbContext);
+            }
         }
 
         public IInstructorRepository InstructorRepository
@@ -88,7 +88,11 @@ namespace Cursus.UnitOfWork
 
         public ILessonRepository LessonRepository
         {
-            get { return _LessonRepository = _LessonRepository ?? new LessonRepository(_dbContext); }
+            get
+            {
+                return _lessonRepository = _lessonRepository ??
+                                           new LessonRepository(_dbContext);
+            }
         }
 
         public INotificationRepository NotificationRepository
@@ -113,7 +117,11 @@ namespace Cursus.UnitOfWork
 
         public ISectionRepository SectionRepository
         {
-            get { return _SectionRepository = _SectionRepository ?? new SectionRepository(_dbContext); }
+            get
+            {
+                return _sectionRepository = _sectionRepository ??
+                                            new SectionRepository(_dbContext);
+            }
         }
 
         public IUserReportRepository UserReportRepository

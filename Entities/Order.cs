@@ -7,7 +7,7 @@ namespace Cursus.Entities
         public string Code { get; set; }
         public double TotalPrice { get; set; }
         public string PaymentUrl { get; set; }
-        public OrderStatus Status { get; set; }
+        public string Status { get; set; }
         public Guid UserID { get; set; }
     }
 }

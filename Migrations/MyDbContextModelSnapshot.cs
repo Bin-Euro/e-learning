@@ -70,6 +70,9 @@ namespace Cursus.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("CourseID")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -77,8 +80,8 @@ namespace Cursus.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<DateTime>("EndDate")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("InstructorID")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("No")
                         .HasColumnType("integer");
@@ -86,11 +89,8 @@ namespace Cursus.Migrations
                     b.Property<Guid>("SectionID")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("StartDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("Status")
-                        .HasColumnType("boolean");
+                    b.Property<int>("TimeTaken")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -284,12 +284,21 @@ namespace Cursus.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CourseID")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("InstructorID")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LearningTime")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -298,17 +307,17 @@ namespace Cursus.Migrations
                     b.Property<int>("No")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("Status")
-                        .HasColumnType("boolean");
+                    b.Property<string>("Overview")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SectionID")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("VideoFile")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("VideoURL")
+                    b.Property<string>("VideoUrl")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -362,8 +371,9 @@ namespace Cursus.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<double>("TotalPrice")
                         .HasColumnType("double precision");
@@ -446,15 +456,15 @@ namespace Cursus.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid>("InstructorID")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("No")
+                    b.Property<int>("No")
                         .HasColumnType("integer");
-
-                    b.Property<bool>("Status")
-                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("UpdatedDate")
                         .HasColumnType("timestamp with time zone");

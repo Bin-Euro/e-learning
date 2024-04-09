@@ -5,10 +5,10 @@ namespace Cursus.Entities
 {
     public class Section : BaseEntity
     {
-        public int? No { get; set; }
+        public int No { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
-        public bool Status { get; set; }
         public Guid CourseID { get; set; }
+        public Guid InstructorID { get; set; }
     }
 }

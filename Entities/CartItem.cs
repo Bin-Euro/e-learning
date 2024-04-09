@@ -3,7 +3,7 @@ using MongoDB.Bson.Serialization.Attributes;
 
 public class CartItem
 {
-    [BsonElement("CourseId")]
-    public string CourseID { get; set; }
-    public DateTime CreatedDate { get; set; } 
+    // [BsonElement("CourseId")]
+    public Guid CourseId { get; set; }
+    public DateTime CreatedDate { get; set; }
 }
